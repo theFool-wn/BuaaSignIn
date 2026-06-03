@@ -305,7 +305,7 @@ rwIDAQAB
         getBtn.addEventListener('click', async () => {
             const id = username.value.trim();
             const pwd = password.value.trim();
-            if (!id || !pwd) return showMessage('请填写账号与密码', 'error');
+            if (!id) return showMessage('请填写账号与密码', 'error');
             getBtn.disabled = true;
             getBtn.textContent = '查询中...';
 
