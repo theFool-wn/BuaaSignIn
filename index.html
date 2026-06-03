@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/jsencrypt@3.3.2/dist/jsencrypt.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzQ5OERCIi8+CjxwYXRoIGQ9Ik0xNiAxNkgyNFYyNEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAxNkgzNlYyNEgyOFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAxNkg0OFYyNEg0MFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiAyOEgyNFYzNkgxNlYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAyOEgzNlYzNkgyOFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAyOEg0OFYzNkg0MFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiA0MEgyNFY0OEgxNlY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCA0MEgzNlY0OEgyOFY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCA0MEg0OFY0OEg0MFY0MFoiIGZpbGw9IndoaXRlIi8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjgiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik01MiA1MEw1NSA1M0w2MCA0OCIgc3Ryb2tlPSIjMzQ5OERCIiBzdHJva2Utd2lkdGg9IjIiLz4KPC9zdmc+">
     <title>BUAA 课程签到</title>
     <style>
@@ -203,22 +205,25 @@
 <body>
     <div class="card">
         <h1>BUAA 课程签到</h1>
-        <p class="desc">输入学号与姓名，查询今日课程并签到</p>
+        <p class="desc">输入账号与密码，查询今日课程并签到</p>
 
         <details class="collapse">
-            <summary>使用方法 / 免责声明</summary>
-            <p>1. 填写真实学号、姓名，点击「查询课程」。</p>
+            <summary>使用方法 / 重要声明</summary>
+            <p>1. 填写BUAA统一认证（SSO）账号、密码，点击「查询课程」。</p>
             <p>2. 选择要签到的课程，点击「签到」。</p>
             <p>3. 为保证合理使用，本工具仅查询当日课程，在课程开始前10分钟至课程结束期间允许打卡。</p>
-            <p>4. 本项目仅用于个人学习和研究交流，请勿用于违反学校规定的用途。</p>
-            <p>5. 使用本工具造成的一切后果由使用者自行承担。</p>
+            <p>4. 由于服务器资源限制，本工具仅限内部人员使用。</p>
+            <p>5. 为保证账号安全，本工具使用RSA非对称加密，同时服务器不保存密码。</p>
+            <p>6. 部分账号由于弱密码或频繁异地登陆，可能无法查询课程。</p>
+            <p>7. 本项目仅用于个人学习和研究交流，请勿用于违反学校规定的用途。</p>
+            <p>8. 使用本工具造成的一切后果由使用者自行承担。</p>
         </details>
 
         <div class="form-group">
             <input id="username" placeholder="账号/学号" autocomplete="off">
         </div>
         <div class="form-group">
-            <input id="password" placeholder="密码" autocomplete="off">
+            <input id="password" placeholder="密码" type="password" autocomplete="off">
         </div>
         <div class="form-group">
             <select id="ScheduleList" required>
@@ -238,7 +243,9 @@
                 <a href="mailto:me@wangnan.net">Email</a>
             </div>
             <div>&copy; 2025-2026 Wang Nan. All rights reserved.</div>
-            <div>参考自<a href="https://github.com/slvf/BUAA-iClassSignIn" target="_blank">Github项目</a></div>
+            <div>参考自<a href="https://github.com/slvf/BUAA-iClassSignIn" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a>&nbsp;&nbsp;
+                <a href="https://github.com/fontlos/buaa-api" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a>
+            </div>
         </footer>
     </div>
 
@@ -249,6 +256,16 @@
         const getBtn = document.getElementById('getScheduleBtn');
         const signBtn = document.getElementById('SignInBtn');
         const msg = document.getElementById('message');
+
+        const publicKey = ` -----BEGIN PUBLIC KEY-----
+                            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxBMXeKC83XAnn5p9Cu5/
+                            hBP2wMDke5xSDtOHBNJjxqODkoM/2UCsHoNIZBsBQ+FLL8qPu1wmkbjEogRBUT2P
+                            1kbB/ieejHILKLkSazs4Ctuo82tLEVYw+aQMStA2h8AU8i2dc67GFBdPLhvgNy0B
+                            laf7Qb6Tl7OfkGerTwW3VFJOrR8MiT/7SPpX2R5f9D6aXxOWLMaLFzhDl6n5g3rk
+                            uO+hC4S/NagVzHmAUf2IYQ1L7Y7FhsVDfPXp8OkO8tRv68Ah78zwaA6Qsw/T6uGj
+                            oEiB1zOC+iuQocowRX6Aj+/mDWe+bNWzIzrURs25cx78kWakdmjEYok+bYNI2ktF
+                            rwIDAQAB
+                            -----END PUBLIC KEY-----`;
         
         let userId = '';
 
@@ -290,8 +307,13 @@
             if (!id || !pwd) return showMessage('请填写账号与密码', 'error');
             getBtn.disabled = true;
             getBtn.textContent = '查询中...';
+
+            let rsa = new JSEncrypt();
+            rsa.setPublicKey(publicKey);
+            let cipher = rsa.encrypt(pwd);
+
             try {
-                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?username=${id}&password=${pwd}`);
+                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?username=${id}&password=${cipher}`);
                 const data = await res.json();
                 if (data.STATUS !== '0') return showMessage(data.message || '未知错误', 'error');
                 const list = data.result || [];
@@ -359,7 +381,7 @@
         username.addEventListener('input', resetAll);
         password.addEventListener('input', resetAll);
 
-        setAllDisabled();
+        // setAllDisabled();
     </script>
 </body>
 
