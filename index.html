@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="js/jsencrypt.min.js"></script>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzQ5OERCIi8+CjxwYXRoIGQ9Ik0xNiAxNkgyNFYyNEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAxNkgzNlYyNEgyOFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAxNkg0OFYyNEg0MFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiAyOEgyNFYzNkgxNlYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAyOEgzNlYzNkgyOFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAyOEg0OFYzNkg0MFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiA0MEgyNFY0OEgxNlY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCA0MEgzNlY0OEgyOFY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCA0MEg0OFY0OEg0MFY0MFoiIGZpbGw9IndoaXRlIi8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjgiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik01MiA1MEw1NSA1M0w2MCA0OCIgc3Ryb2tlPSIjMzQ5OERCIiBzdHJva2Utd2lkdGg9IjIiLz4KPC9zdmc+">
     <title>BUAA 课程签到</title>
     <style>
@@ -248,7 +249,6 @@
         </footer>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jsencrypt@3.3.2/dist/jsencrypt.min.js"></script>
     <script>
         const username = document.getElementById('username');
         const password = document.getElementById('password');
@@ -257,17 +257,18 @@
         const signBtn = document.getElementById('SignInBtn');
         const msg = document.getElementById('message');
 
-        const publicKey = ` -----BEGIN PUBLIC KEY-----
-                            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxBMXeKC83XAnn5p9Cu5/
-                            hBP2wMDke5xSDtOHBNJjxqODkoM/2UCsHoNIZBsBQ+FLL8qPu1wmkbjEogRBUT2P
-                            1kbB/ieejHILKLkSazs4Ctuo82tLEVYw+aQMStA2h8AU8i2dc67GFBdPLhvgNy0B
-                            laf7Qb6Tl7OfkGerTwW3VFJOrR8MiT/7SPpX2R5f9D6aXxOWLMaLFzhDl6n5g3rk
-                            uO+hC4S/NagVzHmAUf2IYQ1L7Y7FhsVDfPXp8OkO8tRv68Ah78zwaA6Qsw/T6uGj
-                            oEiB1zOC+iuQocowRX6Aj+/mDWe+bNWzIzrURs25cx78kWakdmjEYok+bYNI2ktF
-                            rwIDAQAB
-                            -----END PUBLIC KEY-----`;
+        const publicKey = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxBMXeKC83XAnn5p9Cu5/
+hBP2wMDke5xSDtOHBNJjxqODkoM/2UCsHoNIZBsBQ+FLL8qPu1wmkbjEogRBUT2P
+1kbB/ieejHILKLkSazs4Ctuo82tLEVYw+aQMStA2h8AU8i2dc67GFBdPLhvgNy0B
+laf7Qb6Tl7OfkGerTwW3VFJOrR8MiT/7SPpX2R5f9D6aXxOWLMaLFzhDl6n5g3rk
+uO+hC4S/NagVzHmAUf2IYQ1L7Y7FhsVDfPXp8OkO8tRv68Ah78zwaA6Qsw/T6uGj
+oEiB1zOC+iuQocowRX6Aj+/mDWe+bNWzIzrURs25cx78kWakdmjEYok+bYNI2ktF
+rwIDAQAB
+-----END PUBLIC KEY-----`;
         
         let userId = '';
+        let sessionId = '';
 
         function showMessage(text, type = 'success') {
             msg.textContent = text;
@@ -313,7 +314,11 @@
             let cipher = rsa.encrypt(pwd);
 
             try {
-                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?username=${id}&password=${cipher}`);
+                const params = new URLSearchParams({
+                    username: id,
+                    password: cipher
+                })
+                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?${params.toString()}`);
                 const data = await res.json();
                 if (data.STATUS !== '0') return showMessage(data.message || '未知错误', 'error');
                 const list = data.result || [];
