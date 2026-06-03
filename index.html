@@ -204,8 +204,6 @@
     <div class="card">
         <h1>BUAA 课程签到</h1>
         <p class="desc">输入学号与姓名，查询今日课程并签到</p>
-        <p class="desc">由于服务器资源限制，仅限内部成员使用</p>
-        <p class="desc">外部成员仅限查询课程</p>
 
         <details class="collapse">
             <summary>使用方法 / 免责声明</summary>
@@ -217,10 +215,10 @@
         </details>
 
         <div class="form-group">
-            <input id="studentId" placeholder="学号" autocomplete="off">
+            <input id="username" placeholder="账号/学号" autocomplete="off">
         </div>
         <div class="form-group">
-            <input id="studentName" placeholder="姓名" autocomplete="off">
+            <input id="password" placeholder="密码" autocomplete="off">
         </div>
         <div class="form-group">
             <select id="ScheduleList" required>
@@ -245,8 +243,8 @@
     </div>
 
     <script>
-        const studentId = document.getElementById('studentId');
-        const studentName = document.getElementById('studentName');
+        const username = document.getElementById('username');
+        const password = document.getElementById('password');
         const schedule = document.getElementById('ScheduleList');
         const getBtn = document.getElementById('getScheduleBtn');
         const signBtn = document.getElementById('SignInBtn');
@@ -270,8 +268,8 @@
         }
 
         function setAllDisabled() {
-            studentId.disabled = true;
-            studentName.disabled = true;
+            username.disabled = true;
+            password.disabled = true;
             schedule.disabled = true;
             
             getBtn.disabled = true;
@@ -287,18 +285,19 @@
         }
 
         getBtn.addEventListener('click', async () => {
-            const id = studentId.value.trim();
-            const name = studentName.value.trim();
-            if (!id || !name) return showMessage('请填写学号与姓名', 'error');
+            const id = username.value.trim();
+            const pwd = password.value.trim();
+            if (!id || !name) return showMessage('请填写账号与密码', 'error');
             getBtn.disabled = true;
             getBtn.textContent = '查询中...';
             try {
-                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?studentId=${id}&studentName=${encodeURIComponent(name)}`);
+                const res = await fetch(`https://buaa.wangnan.net/api/iClassSchedule?username=${id}&password=${pwd}`);
                 const data = await res.json();
                 if (data.STATUS !== '0') return showMessage(data.message || '未知错误', 'error');
                 const list = data.result || [];
                 if (list.length === 0) return showMessage('今天没有课程，无需签到', 'success');
                 userId = data.user_id || '';
+                sessionId = data.session_id || '';
                 schedule.innerHTML = '<option value="" disabled selected class="placeholder">请选择课程</option>';
                 list.forEach(item => {
                     const { classBeginTime, classEndTime, courseName, classroomName, teacherName, signStatus } = item;
@@ -326,7 +325,8 @@
             signBtn.textContent = '签到中...';
             const item = JSON.parse(val);
             item.user_id = userId;
-            item.studentId = studentId.value.trim();
+            item.session_id = sessionId;
+            item.username = username.value.trim();
             
             try {
                 const res = await fetch('https://buaa.wangnan.net/api/iClassSign', {
@@ -356,8 +356,8 @@
             signBtn.classList.toggle('active', !!schedule.value);
         });
         
-        studentId.addEventListener('input', resetAll);
-        studentName.addEventListener('input', resetAll);
+        username.addEventListener('input', resetAll);
+        password.addEventListener('input', resetAll);
 
         setAllDisabled();
     </script>
