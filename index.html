@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/jsencrypt@3.3.2/dist/jsencrypt.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzQ5OERCIi8+CjxwYXRoIGQ9Ik0xNiAxNkgyNFYyNEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAxNkgzNlYyNEgyOFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAxNkg0OFYyNEg0MFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiAyOEgyNFYzNkgxNlYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAyOEgzNlYzNkgyOFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAyOEg0OFYzNkg0MFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiA0MEgyNFY0OEgxNlY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCA0MEgzNlY0OEgyOFY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCA0MEg0OFY0OEg0MFY0MFoiIGZpbGw9IndoaXRlIi8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjgiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik01MiA1MEw1NSA1M0w2MCA0OCIgc3Ryb2tlPSIjMzQ5OERCIiBzdHJva2Utd2lkdGg9IjIiLz4KPC9zdmc+">
     <title>BUAA 课程签到</title>
@@ -243,12 +242,13 @@
                 <a href="mailto:me@wangnan.net">Email</a>
             </div>
             <div>&copy; 2025-2026 Wang Nan. All rights reserved.</div>
-            <div>参考自<a href="https://github.com/slvf/BUAA-iClassSignIn" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a>&nbsp;&nbsp;
+            <div>参考项目：&nbsp;<a href="https://github.com/slvf/BUAA-iClassSignIn" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a>
                 <a href="https://github.com/fontlos/buaa-api" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a>
             </div>
         </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/jsencrypt@3.3.2/dist/jsencrypt.min.js"></script>
     <script>
         const username = document.getElementById('username');
         const password = document.getElementById('password');
@@ -308,7 +308,7 @@
             getBtn.disabled = true;
             getBtn.textContent = '查询中...';
 
-            let rsa = new JSEncrypt();
+            const rsa = new JSEncrypt();
             rsa.setPublicKey(publicKey);
             let cipher = rsa.encrypt(pwd);
 
