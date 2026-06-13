@@ -30,6 +30,7 @@
 **References:**
 
 * [https://github.com/slvf/BUAA-iClassSignIn](https://github.com/slvf/BUAA-iClassSignIn)
+* [https://github.com/fontlos/buaa-api](https://github.com/fontlos/buaa-api)
 
 ---
 
