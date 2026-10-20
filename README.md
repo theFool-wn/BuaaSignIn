@@ -16,7 +16,7 @@
 ## v2.0.0 大版本更新
 
 1. 将原 `BuaaSignIn` 前端与 [`BuaaProxy`](https://github.com/theFool-wn/BuaaProxy) 的后端合并，统一使用 `Flask` 框架
-2. 移除通用代理端口 `proxy()` 已移除
+2. 移除通用代理端口 `proxy()`
 3. 迁移至 Cloudflare Python Worker 部署，提升稳定性与访问速度
 
 ## 主要路径
