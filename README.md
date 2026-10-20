@@ -54,7 +54,7 @@ BuaaSignIn/
     └── schema.sql          # 数据库结构定义脚本
 ```
 
-## References:**
+## References
 
 * [https://github.com/slvf/BUAA-iClassSignIn](https://github.com/slvf/BUAA-iClassSignIn)
 * [https://github.com/fontlos/buaa-api](https://github.com/fontlos/buaa-api)
