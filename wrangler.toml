@@ -1,0 +1,83 @@
+# =============================================================================================================
+# Cloudflare Worker 配置文件 - BuaaSignIn
+# 部署命令: pip install uv && uv sync && uv run pywrangler deploy
+# 本地开发: pip install uv && uv sync && uv run pywrangler dev
+# =============================================================================================================
+
+name = "buaa-signin"
+main = "BuaaSignIn_Worker.py"
+compatibility_date = "2026-10-10"
+compatibility_flags = ["python_workers"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/", "/health", "/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "buaa-signin-logs"
+database_id = "bc63b07e-0ba3-48d6-8e20-fc01ae870a1e"
+
+[[routes]]
+pattern = "sign.wangnan.net"
+custom_domain = true
+
+[triggers]
+# UTC, at 19:00 on the first day of each month. (UTC+8 03:00 on the second day of each month)
+crons = ["0 19 1 * *"]
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+persist = true
+
+[observability.issue_detection]
+enabled = true
+
+[vars]
+SERVICE_ENABLED = true
+SERVICE_PAUSED_MESSAGE = ""
+SERVICE_RESUME_TIME = ""
+START_TIME = "2025-11-01T00:00:00+08:00"
+
+PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxBMXeKC83XAnn5p9Cu5/
+hBP2wMDke5xSDtOHBNJjxqODkoM/2UCsHoNIZBsBQ+FLL8qPu1wmkbjEogRBUT2P
+1kbB/ieejHILKLkSazs4Ctuo82tLEVYw+aQMStA2h8AU8i2dc67GFBdPLhvgNy0B
+laf7Qb6Tl7OfkGerTwW3VFJOrR8MiT/7SPpX2R5f9D6aXxOWLMaLFzhDl6n5g3rk
+uO+hC4S/NagVzHmAUf2IYQ1L7Y7FhsVDfPXp8OkO8tRv68Ah78zwaA6Qsw/T6uGj
+oEiB1zOC+iuQocowRX6Aj+/mDWe+bNWzIzrURs25cx78kWakdmjEYok+bYNI2ktF
+rwIDAQAB
+-----END PUBLIC KEY-----"""
+LOG_DAILY_MAX_ENTRIES = 5000
+LOG_STORAGE_STOP_MB = 300
+
+SESSION_TTL_SECONDS = 1800
+SIGN_WINDOW_MINUTES = 10
+REQUEST_TIMEOUT = 20000
+TIMEZONE_OFFSET_HOURS = 8
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36"
+
+VPN_BASE_URL = "https://d.buaa.edu.cn"
+VPN_SSO_PATH = "/https/77726476706e69737468656265737421e3e44ed225256951300d8db9d6562d/login?service=https%3A%2F%2Fd.buaa.edu.cn%2Flogin%3Fcas_login%3Dtrue"
+VPN_JUMP_PATH = "/https-8346/77726476706e69737468656265737421f9f44d9d342326526b0988e29d51367ba018/?type=jumpMyCenter"
+VPN_ICLASS_LOGIN_PATH = "/https-8346/77726476706e69737468656265737421f9f44d9d342326526b0988e29d51367ba018/app/user/login.action"
+VPN_SCHEDULE_PATH = "/https-8347/77726476706e69737468656265737421f9f44d9d342326526b0988e29d51367ba018/app/course/get_stu_course_sched.action"
+# 校园网环境用 http, vpn 环境使用 https
+VPN_TIMESTAMP_PATH = "/https-8347/77726476706e69737468656265737421f9f44d9d342326526b0988e29d51367ba018/app/common/get_timestamp.action"
+VPN_SIGN_PATH = "/https-8347/77726476706e69737468656265737421f9f44d9d342326526b0988e29d51367ba018/app/course/stu_scan_sign.action"
+
+# Sensitive values go into Cloudflare Secrets, not this file:
+#     PRIVATE_KEY_PEM
+#     SESSION_SECRET
+#     WHITELIST_STUDENT_IDS
+#     BLOCKLIST_IPS
+#     ADMIN_ACCOUNT
+#     ADMIN_PASSWORD

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzQ5OERCIi8+CjxwYXRoIGQ9Ik0xNiAxNkgyNFYyNEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAxNkgzNlYyNEgyOFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAxNkg0OFYyNEg0MFYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiAyOEgyNFYzNkgxNlYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCAyOEgzNlYzNkgyOFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCAyOEg0OFYzNkg0MFYyOFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xNiA0MEgyNFY0OEgxNlY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yOCA0MEgzNlY0OEgyOFY0MFoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik00MCA0MEg0OFY0OEg0MFY0MFoiIGZpbGw9IndoaXRlIi8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjgiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik01MiA1MEw1NSA1M0w2MCA0OCIgc3Ryb2tlPSIjMzQ5OERCIiBzdHJva2Utd2lkdGg9IjIiLz4KPC9zdmc+">
+        <title>服务状态 - BUAA 课程签到</title>
+        <style>
+            :root {
+                --theme: #3498db;
+                --success: #2ecc71;
+                --text: #2c3e50;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                background: linear-gradient(135deg, #f5f7fa, #e4edf5);
+                color: var(--text);
+            }
+
+            .wrap {
+                width: min(100%, 550px);
+            }
+
+            h1 {
+                text-align: center;
+                color: var(--theme);
+                margin: 0 0 8px;
+            }
+
+            .subtitle {
+                text-align: center;
+                color: #7f8c8d;
+                margin: 0 0 22px;
+                font-size: 14px;
+            }
+
+            .card {
+                background: rgba(255, 255, 255, .9);
+                backdrop-filter: blur(10px);
+                border-radius: 16px;
+                border: 1px solid rgba(255, 255, 255, .6);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+                padding: 28px;
+            }
+
+            .status {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 20px;
+                padding-bottom: 22px;
+                margin-bottom: 20px;
+                border-bottom: 1px solid #e8eef3;
+            }
+
+            .status-icon {
+                width: 52px;
+                height: 52px;
+                border-radius: 50%;
+                display: grid;
+                place-items: center;
+                background: var(--success);
+                color: white;
+                font-size: 25px;
+                flex: none;
+            }
+
+            .status.paused .status-icon {
+                background: #f39c12;
+            }
+
+            .status.error .status-icon {
+                background: #e74c3c;
+            }
+
+            .status h2 {
+                text-align: center;
+                margin: 0 0 3px;
+                font-size: 20px;
+            }
+
+            .status p {
+                margin: 0;
+                color: #7f8c8d;
+                font-size: 14px;
+            }
+
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+            }
+
+            .info-item {
+                border: 1px solid #e3ebf2;
+                background: #f8fbfd;
+                border-radius: 10px;
+                padding: 14px 16px;
+            }
+
+            .label {
+                color: #7f8c8d;
+                font-size: 12px;
+                margin-bottom: 6px;
+            }
+
+            .value {
+                font-size: 16px;
+                font-weight: 550;
+                font-variant-numeric: tabular-nums;
+                text-align: center;
+                overflow-wrap: anywhere;
+            }
+
+            .full {
+                grid-column: 1/-1;
+            }
+
+            .paused-notice {
+                display: none;
+                margin-top: 16px;
+                padding: 13px 15px;
+                border-radius: 10px;
+                background: #fef5e7;
+                color: #9a640a;
+                font-size: 14px;
+                line-height: 1.5;
+                text-align: center;
+            }
+
+            .paused-notice.show {
+                display: block;
+            }
+
+            nav {
+                text-align: center;
+                margin: 20px 0 0;
+            }
+
+            nav a {
+                color: var(--theme);
+                text-decoration: none;
+                font-size: 14px;
+                margin: 0 10px;
+            }
+
+            nav a:hover {
+                text-decoration: underline;
+            }
+
+            footer {
+                text-align: center;
+                color: #95a5a6;
+                font-size: 12px;
+                margin-top: 20px;
+            }
+
+            @media(max-width:550px) {
+                .card {
+                    padding: 21px;
+                }
+
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <main class="wrap">
+            <h1>BUAA 课程签到</h1>
+            <p class="subtitle">服务运行状态</p>
+            <section class="card">
+                <div class="status" id="status">
+                    <div class="status-icon" id="statusIcon">✓</div>
+                    <div>
+                        <h2 id="statusText">正在检查</h2>
+                        <p id="statusDesc">读取服务状态中</p>
+                    </div>
+                </div>
+                <div class="grid">
+                    <div class="info-item">
+                        <div class="label">当前时间</div>
+                        <div class="value" id="currentTime">--</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="label">运行时长</div>
+                        <div class="value" id="uptime">--</div>
+                    </div>
+                    <div class="info-item full">
+                        <div class="label">服务启动时间</div>
+                        <div class="value" id="startTime">--</div>
+                    </div>
+                </div>
+                <div class="paused-notice" id="pausedNotice"></div>
+            </section>
+            <nav><a href="/">返回签到页面</a><a href="/health">刷新状态</a></nav>
+            <footer>&copy; 2025-2026 Wang Nan. All rights reserved.</footer>
+        </main>
+        <script>
+            let startAt = null;
+
+            function formatTime(date) {
+                return date.toLocaleString('zh-CN', {
+                    hour12: false
+                });
+            }
+
+            function updateClock() {
+                document.getElementById('currentTime').textContent = formatTime(new Date());
+                if (startAt) {
+                    const sec = Math.max(0, Math.floor((Date.now() - startAt) / 1000));
+                    const days = Math.floor(sec / 86400);
+                    const hours = Math.floor(sec % 86400 / 3600);
+                    const minutes = Math.floor(sec % 3600 / 60);
+                    document.getElementById('uptime').textContent = `${days} 天 ${hours} 小时 ${minutes} 分 ${sec % 60} 秒`;
+                }
+            }
+            async function refreshHealth() {
+                try {
+                    const response = await fetch('/health', {
+                        headers: {
+                            Accept: 'application/json'
+                        }
+                    });
+                    const data = await response.json();
+                    const status = document.getElementById('status');
+                    const notice = document.getElementById('pausedNotice');
+                    status.className = `status ${data.status === 'paused' ? 'paused' : ''}`;
+                    document.getElementById('statusIcon').textContent = data.status === 'paused' ? 'Ⅱ' : '✓';
+                    document.getElementById('statusText').textContent = data.status === 'paused' ? '服务暂停' : '运行中';
+                    document.getElementById('statusDesc').textContent = data.status === 'paused' ? '维护期间暂停查询与签到' : '服务正常运行';
+                    if (data.status === 'paused') {
+                        notice.textContent = (data.paused_message || '服务器维护') +
+                            (data.resume_time ? `，预计 ${data.resume_time} 恢复` : '');
+                        notice.classList.add('show');
+                    } else {
+                        notice.classList.remove('show');
+                    }
+                    if (data.started_at) {
+                        startAt = new Date(data.started_at);
+                        document.getElementById('startTime').textContent = formatTime(startAt);
+                    }
+                    updateClock();
+                } catch (_) {
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('statusIcon').textContent = '!';
+                    document.getElementById('statusText').textContent = '状态未知';
+                    document.getElementById('statusDesc').textContent = '暂时无法获取服务状态';
+                }
+            }
+            updateClock();
+            refreshHealth();
+            setInterval(updateClock, 1000);
+            setInterval(refreshHealth, 60000);
+        </script>
+    </body>
+
+</html>
