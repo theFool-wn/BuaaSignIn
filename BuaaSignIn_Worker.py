@@ -19,6 +19,8 @@
 #                        Revised by WangNan, 2026/10/17, refactor the frontend and backend,
 #                                                        adapt for Cloudflare Python Worker,
 #                                                        switch to VPN mode
+#                        Revised by WangNan, 2026/10/25, add safety redundancy to prevent potential errors,
+#                                                        remove useless code
 # =============================================================================================================
 
 
@@ -182,7 +184,7 @@ class VpnClient:
         
         timeout_ms = int(config(self.env, 'REQUEST_TIMEOUT', 15000))
         controller = AbortController.new()
-        timer = setTimeout(lambda: controller.abort(), timeout_ms)
+        timer = setTimeout(controller.abort.bind(controller), timeout_ms)
         try:
             response = await fetch(
                 url,
@@ -192,6 +194,11 @@ class VpnClient:
                 redirect='manual',
                 signal=controller.signal
             )
+            response_text = await response.text()
+        except Exception as error:
+            if controller.signal.aborted:
+                raise ValueError('上游请求超时，请重试') from error
+            raise
         finally:
             clearTimeout(timer)
 
@@ -204,13 +211,13 @@ class VpnClient:
                 return await self.request(next_url, method=next_method,
                                           body=body if next_method == method else None,
                                           redirects=redirects - 1)
-        return response
+        return response, response_text
 
     async def get_json(self, url, headers=None):
-        response = await self.request(url, headers=headers)
+        response, text = await self.request(url, headers=headers)
         if response.status != 200:
             raise ValueError(f'上游 HTTP {response.status}')
-        return await response.json()
+        return json.loads(text)
 
 
 def execution_of(html):
@@ -233,7 +240,7 @@ class SsoLoginError(ValueError):
 
 async def get_login_name(client):
     env = client.env
-    jump = await client.request(vpn_url(env, 'VPN_JUMP_PATH'), redirects=6)
+    jump, _ = await client.request(vpn_url(env, 'VPN_JUMP_PATH'), redirects=6)
     target = jump.headers.get('Location') or jump.url
     login_name = parse_qs(urlparse(target).query).get('loginName', [''])[0]
     if not login_name:
@@ -247,7 +254,7 @@ async def get_login_name(client):
 async def sso_login(client, username, password, is_admin=False):
     env = client.env
     login_url = vpn_url(env, 'VPN_SSO_PATH')
-    response = await client.request(login_url, redirects=6)
+    response, html = await client.request(login_url, redirects=6)
 
     if response.status != 200:
         raise SsoLoginError(f'SSO 登录页异常，状态码 {response.status}')
@@ -257,7 +264,7 @@ async def sso_login(client, username, password, is_admin=False):
         return await get_login_name(client)
     
     submit_url = response.url if safe_vpn_url(env, response.url) else login_url
-    execution = execution_of(await response.text())
+    execution = execution_of(html)
     if not execution:
         raise SsoLoginError('SSO 登录页缺少 execution')
 
@@ -271,7 +278,7 @@ async def sso_login(client, username, password, is_admin=False):
     }
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     
-    response = await client.request(
+    response, html = await client.request(
         submit_url,
         method='POST',
         body=urlencode(form),
@@ -282,7 +289,6 @@ async def sso_login(client, username, password, is_admin=False):
     if response.status == 302:
         pass
     elif response.status == 200:
-        html = await response.text()
         if 'continueForm' not in html:
             raise SsoLoginError('SSO 登录页未知错误')
         
@@ -295,7 +301,7 @@ async def sso_login(client, username, password, is_admin=False):
         })
 
         try:
-            response = await client.request(
+            response, _ = await client.request(
                 submit_url,
                 method='POST',
                 body=risk_form,
@@ -406,7 +412,9 @@ async def schedule(body, env):
         return api_result('3', '外部成员，禁止访问', 403)
 
     token_data = await read_ticket(env, str(body.get('ticket', ''))) if body.get('ticket') else None
-    if token_data and token_data.get('username') == username.upper():
+    if body.get('ticket') and (not token_data or token_data.get('username') != username.upper()):
+        return api_result('6', '会话已过期，请重新查询', 401)
+    if token_data:
         session_id, user_id = token_data['session_id'], token_data['user_id']
         student_id = token_data.get('student_id', username)
         real_name = token_data.get('real_name', '')
@@ -500,11 +508,13 @@ async def sign_in(body, env):
         return api_result('1', '请求数据格式错误', 400)
 
     ticket = await read_ticket(env, str(body.get('ticket', '')))
-    ticket_user = ticket.get('username', '') if ticket else ''
+    if not ticket:
+        return api_result('6', '会话已过期，请重新查询', 401)
+    ticket_user = ticket.get('username', '')
     special = secret_json(env, 'ADMIN_ACCOUNT', {})
     is_admin = ticket_user.upper() in {str(x).upper() for x in special.get('aliases', [])}
-    if not ticket or (not is_admin and not allowed_user(env, ticket_user)):
-        return api_result('3', '会话已过期，请重新查询', 403)
+    if not is_admin and not allowed_user(env, ticket_user):
+        return api_result('3', '外部成员，禁止访问', 403)
     set_access_identity(ticket.get('student_id', ticket_user), ticket.get('real_name', ''))
     
     course_id = str(body.get('id', ''))
@@ -530,7 +540,7 @@ async def sign_in(body, env):
             'timestamp': timestamp,
             'id': ticket['user_id']
         })
-        response = await client.request(
+        response, text = await client.request(
             vpn_url(env, 'VPN_SIGN_PATH') + '?' + query,
             method='POST',
             headers={'sessionId': ticket['session_id']
@@ -539,7 +549,7 @@ async def sign_in(body, env):
         if response.status != 200:
             raise ValueError(f'签到上游 HTTP {response.status}')
         
-        result = await response.json()
+        result = json.loads(text)
         return Response.json(result, headers={'Cache-Control': 'no-store'})
     except Exception as error:
         console.warn(f'签到失败: {type(error).__name__}')
@@ -559,8 +569,11 @@ def service_start_time(env):
 def health(env):
     started = service_start_time(env)
     uptime = max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+    configured = service_configured(env)
     return {
-        'status': 'healthy' if enabled(env) else 'paused',
+        'status': 'paused' if not enabled(env) else ('healthy' if configured else 'unconfigured'),
+        'responsive': True,
+        'configured': configured,
         'service': 'BuaaSignIn',
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'started_at': started.isoformat(),
@@ -575,7 +588,7 @@ async def log_access(env, request, path, status, elapsed_ms, identity):
         # A SQLite upsert reserves one of today's log slots atomically across isolates.
         now = datetime.now(timezone.utc)
         day = int(now.strftime('%Y%m%d'))
-        daily_limit = max(0, min(int(config(env, 'LOG_DAILY_MAX_ENTRIES', 1000)), 1000))
+        daily_limit = max(0, min(int(config(env, 'LOG_DAILY_MAX_ENTRIES', 10000)), 10000))
         
         if not daily_limit:
             return
@@ -616,29 +629,37 @@ async def log_access(env, request, path, status, elapsed_ms, identity):
 
 
 async def clean_access_logs(env):
-    try:
-        now = datetime.now(timezone.utc)
-        day = int(now.strftime('%Y%m%d'))
-        # Keep the entire previous calendar month plus the current month.
-        previous_month_end = now.replace(day=1) - timedelta(days=1)
-        cutoff = previous_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-        reservation = await env.DB.prepare(
-            'INSERT INTO cleanup_budget (day, reserved) VALUES (?, 40000) '
-            'ON CONFLICT(day) DO NOTHING'
-        ).bind(day).run()
-        if not reservation.meta.changes:
-            return
-        result = await env.DB.prepare(
-            'DELETE FROM access_logs WHERE id IN ('
-            'SELECT id FROM access_logs WHERE at < ? ORDER BY at LIMIT 40000)'
-        ).bind(cutoff).run()
+    now = datetime.now(timezone.utc)
+    day = int(now.strftime('%Y%m%d'))
+    # Keep the entire previous calendar month plus the current month.
+    previous_month_end = now.replace(day=1) - timedelta(days=1)
+    cutoff = previous_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    for attempt in range(3):
+        try:
+            results = await env.DB.batch(_to_js([
+                env.DB.prepare(
+                    'DELETE FROM access_logs WHERE NOT EXISTS ('
+                    'SELECT 1 FROM cleanup_budget WHERE day = ?) AND id IN ('
+                    'SELECT id FROM access_logs WHERE at < ? ORDER BY at LIMIT 40000)'
+                ).bind(day, cutoff),
+                env.DB.prepare(
+                    'INSERT INTO cleanup_budget (day, reserved) VALUES (?, 40000) '
+                    'ON CONFLICT(day) DO NOTHING'
+                ).bind(day)
+            ]))
+            break
+        except Exception as error:
+            console.error(f'D1 日志清理失败 ({attempt + 1}/3): {type(error).__name__}: {error}')
+            if attempt == 2:
+                raise
+
+    if results[1].meta.changes:
         console.log(json.dumps({
             'task': 'access_log_cleanup',
-            'deleted': result.meta.changes,
-            'rows_written': result.meta.rows_written}
-        ))
-    except Exception as error:
-        console.error(f'D1 日志清理失败: {type(error).__name__}: {error}')
+            'deleted': results[0].meta.changes,
+            'rows_written': results[0].meta.rows_written
+        }))
 
 
 def environment():

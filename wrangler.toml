@@ -24,8 +24,8 @@ pattern = "sign.wangnan.net"
 custom_domain = true
 
 [triggers]
-# UTC, at 19:00 on the first day of each month. (UTC+8 03:00 on the second day of each month)
-crons = ["0 19 1 * *"]
+# UTC, at 19:00 every Saturday. (UTC+8 03:00 every Sunday)
+crons = ["0 19 * * SAT"]
 
 [observability.logs]
 enabled = true
@@ -56,7 +56,7 @@ uO+hC4S/NagVzHmAUf2IYQ1L7Y7FhsVDfPXp8OkO8tRv68Ah78zwaA6Qsw/T6uGj
 oEiB1zOC+iuQocowRX6Aj+/mDWe+bNWzIzrURs25cx78kWakdmjEYok+bYNI2ktF
 rwIDAQAB
 -----END PUBLIC KEY-----"""
-LOG_DAILY_MAX_ENTRIES = 5000
+LOG_DAILY_MAX_ENTRIES = 10000
 LOG_STORAGE_STOP_MB = 300
 
 SESSION_TTL_SECONDS = 1800

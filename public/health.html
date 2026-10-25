@@ -171,10 +171,6 @@
                 text-decoration: none;
             }
 
-            nav a:hover {
-                text-decoration: underline;
-            }
-
             @media(max-width:550px) {
                 .card {
                     padding: 21px;
@@ -238,19 +234,28 @@
                 }
             }
             async function refreshHealth() {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 15000);
                 try {
                     const response = await fetch('/health', {
+                        signal: controller.signal,
                         headers: {
                             Accept: 'application/json'
                         }
                     });
                     const data = await response.json();
+                    if (!response.ok || !['healthy', 'paused', 'unconfigured'].includes(data.status)) {
+                        throw new Error('未知服务状态');
+                    }
                     const status = document.getElementById('status');
                     const notice = document.getElementById('pausedNotice');
-                    status.className = `status ${data.status === 'paused' ? 'paused' : ''}`;
-                    document.getElementById('statusIcon').textContent = data.status === 'paused' ? 'Ⅱ' : '✓';
-                    document.getElementById('statusText').textContent = data.status === 'paused' ? '服务暂停' : '运行中';
-                    document.getElementById('statusDesc').textContent = data.status === 'paused' ? '维护期间暂停查询与签到' : '服务正常运行';
+                    const paused = data.status === 'paused';
+                    const unconfigured = data.status === 'unconfigured';
+                    status.className = `status ${paused ? 'paused' : (unconfigured ? 'error' : '')}`;
+                    document.getElementById('statusIcon').textContent = paused ? 'Ⅱ' : (unconfigured ? '!' : '✓');
+                    document.getElementById('statusText').textContent = paused ? '服务暂停' : (unconfigured ? '配置未就绪' : '运行中');
+                    document.getElementById('statusDesc').textContent = paused ? '维护期间暂停查询与签到' :
+                        (unconfigured ? '进程可响应，业务配置尚未完成' : '进程可响应，业务配置已就绪');
                     if (data.status === 'paused') {
                         notice.textContent = (data.paused_message || '服务器维护') +
                             (data.resume_time ? `，预计 ${data.resume_time} 恢复` : '');
@@ -263,11 +268,14 @@
                         document.getElementById('startTime').textContent = formatTime(startAt);
                     }
                     updateClock();
-                } catch (_) {
+                } catch (error) {
                     document.getElementById('status').className = 'status error';
                     document.getElementById('statusIcon').textContent = '!';
                     document.getElementById('statusText').textContent = '状态未知';
-                    document.getElementById('statusDesc').textContent = '暂时无法获取服务状态';
+                    document.getElementById('statusDesc').textContent = error.name === 'AbortError' ? '请求超时，请刷新状态重试' : '暂时无法获取服务状态，请刷新状态重试';
+                    document.getElementById('pausedNotice').classList.remove('show');
+                } finally {
+                    clearTimeout(timer);
                 }
             }
             updateClock();

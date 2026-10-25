@@ -4,13 +4,17 @@ const schedule = document.getElementById('ScheduleList');
 const getBtn = document.getElementById('getScheduleBtn');
 const signBtn = document.getElementById('SignInBtn');
 const msg = document.getElementById('message');
-const details = document.getElementById('disclaimerDetails');
+const disclaimerTrigger = document.getElementById('disclaimerTrigger');
 const disclaimerModal = document.getElementById('disclaimerModal');
 const pausedModal = document.getElementById('pausedModal');
 
 let publicKey = '';
 let ticket = '';
 let servicePaused = false;
+let requestVersion = 0;
+let querying = false;
+let signing = false;
+let messageTimer;
 
 async function encryptPassword(value) {
     const encoded = publicKey.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
@@ -27,39 +31,65 @@ async function encryptPassword(value) {
     return btoa(String.fromCharCode(...ciphertext));
 }
 
+async function fetchJson(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        const data = await response.json();
+        if (!response.ok && !data.STATUS) throw new Error('服务请求失败');
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function showMessage(text, type = 'success') {
+    clearTimeout(messageTimer);
     msg.textContent = text;
     msg.className = `message ${type} show`;
-    setTimeout(() => msg.classList.remove('show'), 5000);
+    messageTimer = setTimeout(() => msg.classList.remove('show'), 5000);
 }
 
-showMessage('初始化成功', 'initialize');
+function updateControls() {
+    const busy = servicePaused || querying || signing;
+    username.disabled = busy;
+    password.disabled = busy;
+    schedule.disabled = busy;
+    getBtn.disabled = busy;
+    getBtn.textContent = querying ? '查询中...' : '查询课程';
+    signBtn.disabled = busy || !ticket || !schedule.value;
+    signBtn.classList.toggle('active', !signBtn.disabled);
+    signBtn.textContent = signing ? '签到中...' : '签到';
+}
 
 function resetAll() {
+    requestVersion++;
     ticket = '';
     schedule.innerHTML = '<option value="" disabled selected class="placeholder">请先查询课程</option>';
-    signBtn.disabled = true;
-    signBtn.classList.remove('active');
+    updateControls();
 }
-
-// The collapsed declaration remains on the page; clicking it opens the same dialog.
-document.getElementById('disclaimerModalContent').innerHTML =
-    details.querySelector('.collapse-content-inner').innerHTML;
 
 function openDisclaimer() {
     if (servicePaused) return;
-    document.getElementById('dontShowAgain').checked = (localStorage.getItem('buaa_disclaimer_dismissed') === 'true');
-    const trigger = details.querySelector('summary').getBoundingClientRect();
+    let dismissed = false;
+    try {
+        dismissed = localStorage.getItem('buaa_disclaimer_dismissed') === 'true';
+    } catch (_) {
+        /* storage unavailable */
+    }
+    document.getElementById('dontShowAgain').checked = dismissed;
+    const trigger = disclaimerTrigger.getBoundingClientRect();
     const overlay = disclaimerModal.getBoundingClientRect();
     disclaimerModal.style.setProperty('--collapse-x', `${trigger.left + trigger.width / 2 - (overlay.left + overlay.width / 2)}px`);
     disclaimerModal.style.setProperty('--collapse-y', `${trigger.top + trigger.height / 2 - (overlay.top + overlay.height / 2)}px`);
     disclaimerModal.classList.add('show');
 }
 
-details.querySelector('summary').addEventListener('click', event => {
-    event.preventDefault();
-    openDisclaimer();
-});
+disclaimerTrigger.addEventListener('click', openDisclaimer);
 
 try {
     if (localStorage.getItem('buaa_disclaimer_dismissed') !== 'true') {
@@ -70,11 +100,14 @@ try {
 }
 
 document.getElementById('disclaimerConfirm').addEventListener('click', () => {
-    if (document.getElementById('dontShowAgain').checked) {
-        try {
+    try {
+        if (document.getElementById('dontShowAgain').checked) {
             localStorage.setItem('buaa_disclaimer_dismissed', 'true');
-        } catch (_) {
-            /* private mode */ }
+        } else {
+            localStorage.removeItem('buaa_disclaimer_dismissed');
+        }
+    } catch (_) {
+        /* storage unavailable */
     }
     disclaimerModal.classList.remove('show');
 });
@@ -89,12 +122,8 @@ function setServicePaused(data) {
     banner.textContent = message;
     banner.classList.add('show');
     document.getElementById('pausedMessage').textContent = message;
-    username.disabled = true;
-    password.disabled = true;
-    schedule.disabled = true;
-    getBtn.disabled = true;
-    signBtn.disabled = true;
-    details.style.pointerEvents = 'none';
+    updateControls();
+    disclaimerTrigger.disabled = true;
     pausedModal.classList.add('show');
 }
 
@@ -103,60 +132,66 @@ document.getElementById('pausedConfirm').addEventListener('click', () => {
 });
 
 async function init() {
+    showMessage('初始化成功', 'initialize');
     try {
-        const response = await fetch('/api/config', {
+        const data = await fetchJson('/api/config', {
             headers: {
                 Accept: 'application/json'
             }
         });
-        const data = await response.json();
-        publicKey = data.public_key || '';
-        if (data.status === 'paused') setServicePaused(data);
-        if (!servicePaused && !publicKey) showMessage('服务尚未完成密钥配置', 'error');
-    } catch (_) {
-        showMessage('服务状态获取失败', 'error');
+        if (data.status === 'paused') {
+            setServicePaused(data);
+        } else if (!['healthy', 'unconfigured'].includes(data.status)) {
+            showMessage('服务状态未知，请刷新页面重试', 'error');
+        } else if (data.status === 'unconfigured' || !data.public_key) {
+            showMessage('服务尚未完成配置', 'error');
+        } else {
+            publicKey = data.public_key;
+        }
+    } catch (error) {
+        showMessage(error.name === 'AbortError' ? '服务状态获取超时，请刷新页面重试' : '服务状态获取失败，请刷新页面重试', 'error');
     }
 }
 
 getBtn.addEventListener('click', async () => {
-    if (servicePaused) return;
+    if (servicePaused || querying || signing) return;
     const id = username.value.trim();
     if (!id || (!ticket && !password.value)) return showMessage('请填写账号与密码', 'error');
-    if (!publicKey) return showMessage('服务尚未完成密钥配置', 'error');
-    getBtn.disabled = true;
-    getBtn.textContent = '查询中...';
+    if (!publicKey) return showMessage('服务尚未就绪，请刷新页面重试', 'error');
+    const version = ++requestVersion;
+    querying = true;
+    updateControls();
 
     const body = {
         username: id
     };
-    if (ticket) {
-        body.ticket = ticket;
-    } else {
-        try {
-            body.password = await encryptPassword(password.value);
-        } catch (_) {
-            getBtn.disabled = false;
-            getBtn.textContent = '查询课程';
-            return showMessage('密码加密失败', 'error');
-        }
-    }
-
     try {
-        const response = await fetch('/api/iClassSchedule', {
+        if (ticket) {
+            body.ticket = ticket;
+        } else {
+            try {
+                body.password = await encryptPassword(password.value);
+            } catch (_) {
+                if (version === requestVersion) showMessage('密码加密失败', 'error');
+                return;
+            }
+        }
+        if (version !== requestVersion) return;
+        const data = await fetchJson('/api/iClassSchedule', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(body)
         });
-        const data = await response.json();
+        if (version !== requestVersion) return;
         if (data.STATUS === '5') {
             setServicePaused(data);
             return;
         }
         if (data.STATUS !== '0') {
-            if (ticket) ticket = '';
-            return showMessage(data.message || '查询失败，请重试', 'error');
+            resetAll();
+            return showMessage(data.STATUS === '6' ? '会话已过期，请重新查询' : (data.message || '查询失败，请重试'), 'error');
         }
         ticket = data.ticket || '';
         schedule.innerHTML = '<option value="" disabled selected class="placeholder">请选择课程</option>';
@@ -171,57 +206,60 @@ getBtn.addEventListener('click', async () => {
             schedule.appendChild(option);
         });
         showMessage(list.length ? '课程查询成功' : '今天没有课程，无需签到');
-    } catch (_) {
-        showMessage('网络请求失败', 'error');
-    } finally {
-        if (!servicePaused) {
-            getBtn.disabled = false;
-            getBtn.textContent = '查询课程';
+    } catch (error) {
+        if (version === requestVersion) {
+            showMessage(error.name === 'AbortError' ? '课程查询超时，请重试' : '网络请求失败，请重试', 'error');
         }
+    } finally {
+        querying = false;
+        updateControls();
     }
 });
 
 signBtn.addEventListener('click', async () => {
-    if (servicePaused || !ticket || !schedule.value) return;
-    signBtn.disabled = true;
-    signBtn.textContent = '签到中...';
+    if (servicePaused || querying || signing || !ticket || !schedule.value) return;
+    const courseId = schedule.value;
+    const option = schedule.options[schedule.selectedIndex];
+    const version = requestVersion;
+    signing = true;
+    updateControls();
     try {
-        const response = await fetch('/api/iClassSign', {
+        const data = await fetchJson('/api/iClassSign', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 ticket,
-                id: schedule.value
+                id: courseId
             })
         });
-        const data = await response.json();
+        if (version !== requestVersion) return;
         if (data.STATUS === '5') {
             setServicePaused(data);
             return;
         }
+        if (data.STATUS === '6') {
+            resetAll();
+            return showMessage('会话已过期，请重新查询', 'error');
+        }
         if (data.STATUS === '0') {
-            const option = schedule.options[schedule.selectedIndex];
             option.textContent = option.textContent.replace('[未签到]', '[已签到]');
             showMessage('签到成功');
         } else {
             showMessage(data.message || data.ERRMSG || '签到失败', 'error');
         }
-    } catch (_) {
-        showMessage('网络请求失败', 'error');
-    } finally {
-        if (!servicePaused) {
-            signBtn.disabled = !schedule.value;
-            signBtn.textContent = '签到';
+    } catch (error) {
+        if (version === requestVersion) {
+            showMessage(error.name === 'AbortError' ? '签到请求超时，请先重新查询确认结果后重试' : '网络请求失败，请重新查询确认签到结果', 'error');
         }
+    } finally {
+        signing = false;
+        updateControls();
     }
 });
 
-schedule.addEventListener('change', () => {
-    signBtn.disabled = !schedule.value;
-    signBtn.classList.toggle('active', !!schedule.value);
-});
+schedule.addEventListener('change', updateControls);
 username.addEventListener('input', resetAll);
 password.addEventListener('input', resetAll);
 init();
