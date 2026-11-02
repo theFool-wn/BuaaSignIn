@@ -73,6 +73,139 @@ function resetAll() {
     updateControls();
 }
 
+function askCaptcha(data, body, version) {
+    const dialog = document.getElementById('captchaDialog');
+    const form = document.getElementById('captchaForm');
+    const input = document.getElementById('captchaInput');
+    const image = document.getElementById('captchaImage');
+    const refresh = document.getElementById('captchaRefresh');
+    const cancel = document.getElementById('captchaCancel');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const message = document.getElementById('captchaMessage');
+
+    let current = data;
+    let refreshing = false;
+    let closed = false;
+
+    message.textContent = data.message || '请输入图片验证码';
+    image.src = data.captcha_image;
+    input.value = '';
+    refresh.disabled = false;
+    submitBtn.disabled = false;
+
+    return new Promise(resolve => {
+        const finish = result => {
+            if (closed) return;
+            closed = true;
+            form.removeEventListener('submit', submit);
+            refresh.removeEventListener('click', reload);
+            cancel.removeEventListener('click', dismiss);
+            dialog.removeEventListener('cancel', dismiss);
+            dialog.close();
+            image.removeAttribute('src');
+            resolve(result);
+        };
+
+        const submit = event => {
+            event.preventDefault();
+            if (refreshing) return;
+
+            const value = input.value.trim();
+            if (value) {
+                finish({
+                    captcha: value,
+                    captcha_refresh: false,
+                    captcha_token: current.captcha_token
+                });
+            }
+        };
+
+        const reload = async () => {
+            if (refreshing || closed) return;
+            refreshing = true;
+            refresh.disabled = true;
+            submitBtn.disabled = true;
+            message.textContent = '正在刷新验证码…';
+
+            try {
+                const next = await fetchJson('/api/iClassSchedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...body,
+                        captcha: '',
+                        captcha_refresh: true,
+                        captcha_token: current.captcha_token
+                    })
+                });
+
+                if (closed) return;
+                if (version !== requestVersion || servicePaused) {
+                    finish(null);
+                    return;
+                }
+                if (next.STATUS === '5') {
+                    finish(null);
+                    setServicePaused(next);
+                    return;
+                }
+                if (next.STATUS !== '7') {
+                    finish(null);
+                    resetAll();
+                    showMessage(next.message || '验证码刷新失败，请重新查询', 'error');
+                    return;
+                }
+
+                current = next;
+                image.src = next.captcha_image;
+                input.value = '';
+                message.textContent = next.message || '请输入图片验证码';
+                submitBtn.disabled = false;
+                input.focus();
+            } catch (error) {
+                if (!closed) {
+                    // 上游可能已刷新成功，旧图片不一定还能使用。
+                    message.textContent = '刷新失败，请再次点击图片刷新，或取消后重新查询';
+                }
+            } finally {
+                refreshing = false;
+                if (!closed) refresh.disabled = false;
+            }
+        };
+
+        const dismiss = event => {
+            event.preventDefault();
+            finish(null);
+        };
+
+        form.addEventListener('submit', submit);
+        refresh.addEventListener('click', reload);
+        cancel.addEventListener('click', dismiss);
+        dialog.addEventListener('cancel', dismiss);
+        dialog.showModal();
+        input.focus();
+    });
+}
+
+async function queryWithCaptcha(body, version) {
+    while (version === requestVersion && !servicePaused) {
+        const data = await fetchJson('/api/iClassSchedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        if (version !== requestVersion || servicePaused) return null;
+        if (data.STATUS !== '7') return data;
+
+        const answer = await askCaptcha(data, body, version);
+        if (!answer || version !== requestVersion || servicePaused) return null;
+
+        Object.assign(body, answer);
+    }
+    return null;
+}
+
 function openDisclaimer() {
     if (servicePaused) return;
     let dismissed = false;
@@ -177,21 +310,15 @@ getBtn.addEventListener('click', async () => {
             }
         }
         if (version !== requestVersion) return;
-        const data = await fetchJson('/api/iClassSchedule', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
-        });
-        if (version !== requestVersion) return;
+        const data = await queryWithCaptcha(body, version);
+        if (!data || version !== requestVersion) return;
         if (data.STATUS === '5') {
             setServicePaused(data);
             return;
         }
         if (data.STATUS !== '0') {
             resetAll();
-            return showMessage(data.STATUS === '6' ? '会话已过期，请重新查询' : (data.message || '查询失败，请重试'), 'error');
+            return showMessage(data.message || (data.STATUS === '6' ? '会话已过期，请重新查询' : '查询失败，请重试'), 'error');
         }
         ticket = data.ticket || '';
         schedule.innerHTML = '<option value="" disabled selected class="placeholder">请选择课程</option>';

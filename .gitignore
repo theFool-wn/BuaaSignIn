@@ -23,6 +23,7 @@ __pycache__/
 .wrangler/
 python_modules/
 node_modules/
+.npm-cache/
 
 # Conda
 .conda/

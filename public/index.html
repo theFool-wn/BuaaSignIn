@@ -308,6 +308,62 @@
                 cursor: not-allowed;
             }
 
+            #captchaDialog {
+                width: min(360px, calc(100vw - 32px));
+                box-sizing: border-box;
+                padding: 24px;
+                border: 0;
+                border-radius: 16px;
+                box-shadow: 0 16px 48px #0003;
+                margin: auto;
+            }
+
+            #captchaDialog::backdrop {
+                background: #0006;
+            }
+
+            #captchaTitle {
+                text-align: center;
+            }
+
+            #captchaMessage {
+                text-align: center;
+                font-size: 14px;
+                margin-top: 6px;
+            }
+
+            #captchaRefresh {
+                display: block;
+                margin: 16px auto;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                cursor: pointer;
+                width: fit-content;
+                box-shadow: none;
+            }
+
+            #captchaRefresh:hover {
+                transform: none;
+            }
+
+            #captchaImage {
+                display: block;
+                max-width: 100%;
+            }
+
+            #captchaInput {
+                text-align: center;
+            }
+
+
+            #captchaActions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 12px;
+                margin-top: 20px;
+            }
+
             @media (max-width: 480px) {
                 .card {
                     padding: 20px 15px;
@@ -392,6 +448,26 @@
                 <div class="modal-footer"><button class="modal-btn" id="pausedConfirm">确认</button></div>
             </div>
         </div>
+
+        <dialog id="captchaDialog" aria-labelledby="captchaTitle">
+            <form id="captchaForm">
+                <h3 id="captchaTitle">登录验证</h3>
+                <p id="captchaMessage">请输入图片验证码</p>
+
+                <button type="button" id="captchaRefresh" title="点击刷新验证码">
+                    <img id="captchaImage" alt="登录验证码，点击可刷新">
+                </button>
+
+                <input id="captchaInput" name="captcha" type="text"
+                       maxlength="32" autocomplete="off"
+                       spellcheck="false" required>
+
+                <div id="captchaActions">
+                    <button type="button" id="captchaCancel">取消</button>
+                    <button type="submit">确认</button>
+                </div>
+            </form>
+        </dialog>
 
         <script src="/app.js" defer></script>
     </body>

@@ -21,6 +21,8 @@
 #                                                        switch to VPN mode
 #                        Revised by WangNan, 2026/10/25, add safety redundancy to prevent potential errors,
 #                                                        remove useless code
+#                        Revised by WangNan, 2026/11/2, add captcha field,
+#                                                       fix SQL bug
 # =============================================================================================================
 
 
@@ -119,9 +121,9 @@ async def make_ticket(env, data):
     return base64.urlsafe_b64encode(iv.to_bytes() + encrypted.to_bytes()).decode()
 
 
-async def read_ticket(env, token):
+async def read_ticket(env, token, max_length=12000):
     try:
-        if len(token) > 12000:
+        if len(token) > max_length:
             return None
         raw = base64.urlsafe_b64decode(token)
         decrypted = await crypto.subtle.decrypt(
@@ -173,7 +175,7 @@ class VpnClient:
             except Exception:
                 console.warn('VPN Cookie 解析失败')
 
-    async def request(self, url, method='GET', body=None, headers=None, redirects=0):
+    async def request(self, url, method='GET', body=None, headers=None, redirects=0, binary=False):
         if not safe_vpn_url(self.env, url):
             raise ValueError('VPN 返回了非预期地址')
         outgoing = {'User-Agent': config(self.env, 'USER_AGENT')}
@@ -194,7 +196,7 @@ class VpnClient:
                 redirect='manual',
                 signal=controller.signal
             )
-            response_text = await response.text()
+            response_text = bytes(await response.bytes()) if binary else await response.text()
         except Exception as error:
             if controller.signal.aborted:
                 raise ValueError('上游请求超时，请重试') from error
@@ -238,6 +240,45 @@ class SsoLoginError(ValueError):
     """A known SSO rejection that should keep the original business response."""
 
 
+class CaptchaRequired(Exception):
+    def __init__(self, response):
+        self.response = response
+
+
+def captcha_id_of(html):
+    match = re.search(
+        r"""config\.captcha\s*=\s*\{\s*type\s*:\s*['"]image['"]\s*,\s*id\s*:\s*['"]([^'"]+)['"]""",
+        html
+    )
+    return match.group(1) if match else None
+
+
+async def require_captcha(client, owner, submit_url, execution, captcha_id,
+                          expires_at=None, message='请输入图片验证码'):
+    url = urljoin(submit_url, 'captcha') + '?' + urlencode({
+        'captchaId': captcha_id,
+        'r': str(time.time_ns())
+    })
+    response, image = await client.request(url, binary=True)
+    if response.status != 200 or not image.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise SsoLoginError('验证码获取失败，请重新查询')
+
+    token = await make_ticket(client.env, {
+        'purpose': 'captcha',
+        'username': owner.upper(),
+        'submit_url': submit_url,
+        'execution': execution,
+        'captcha_id': captcha_id,
+        'cookies': client.cookies,
+        'expires_at': expires_at or int(time.time()) + 300
+    })
+    raise CaptchaRequired(api_result(
+        '7', message,
+        captcha_token=token,
+        captcha_image='data:image/png;base64,' + base64.b64encode(image).decode()
+    ))
+
+
 async def get_login_name(client):
     env = client.env
     jump, _ = await client.request(vpn_url(env, 'VPN_JUMP_PATH'), redirects=6)
@@ -251,33 +292,53 @@ async def get_login_name(client):
     return login_name
 
 
-async def sso_login(client, username, password, is_admin=False):
+async def sso_login(client, username, password, is_admin=False, *, owner=None, challenge=None, captcha='', refresh=False):
     env = client.env
+    owner = owner or username
     login_url = vpn_url(env, 'VPN_SSO_PATH')
-    response, html = await client.request(login_url, redirects=6)
 
-    if response.status != 200:
-        raise SsoLoginError(f'SSO 登录页异常，状态码 {response.status}')
-    if response.url.rstrip('/') == config(env, 'VPN_BASE_URL').rstrip('/'):
-        if is_admin:
-            return
-        return await get_login_name(client)
-    
-    submit_url = response.url if safe_vpn_url(env, response.url) else login_url
-    execution = execution_of(html)
-    if not execution:
-        raise SsoLoginError('SSO 登录页缺少 execution')
+    if challenge:
+        client.cookies = challenge['cookies']
+        submit_url = challenge['submit_url']
+        execution = challenge['execution']
+        captcha_id = challenge['captcha_id']
+
+        if refresh or not captcha:
+            await require_captcha(
+                client, owner, submit_url, execution, captcha_id,
+                challenge['expires_at']
+            )
+    else:
+        response, html = await client.request(login_url, redirects=6)
+        if response.status != 200:
+            raise SsoLoginError(f'SSO 登录页异常，状态码 {response.status}')
+
+        if response.url.rstrip('/') == config(env, 'VPN_BASE_URL').rstrip('/'):
+            if is_admin:
+                return
+            return await get_login_name(client)
+
+        submit_url = response.url if safe_vpn_url(env, response.url) else login_url
+        execution = execution_of(html)
+        if not execution:
+            raise SsoLoginError('SSO 登录页缺少 execution')
+
+        captcha_id = captcha_id_of(html)
+        if captcha_id:
+            await require_captcha(client, owner, submit_url, execution, captcha_id)
 
     form = {
-        'username' : username,
-        'password' : password,
-        'submit'   : '登录',
-        'type'     : 'username_password',
+        'username': username,
+        'password': password,
+        'submit': '登录',
+        'type': 'username_password',
         'execution': execution,
-        '_eventId' : 'submit'
+        '_eventId': 'submit'
     }
+    if captcha_id:
+        form['captcha'] = captcha
+
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    
     response, html = await client.request(
         submit_url,
         method='POST',
@@ -286,42 +347,51 @@ async def sso_login(client, username, password, is_admin=False):
         redirects=0
     )
 
+    if response.status in (200, 401) and 'continueForm' not in html:
+        next_id = captcha_id_of(html)
+        next_execution = execution_of(html)
+        if next_id and next_execution:
+            await require_captcha(
+                client, owner, submit_url, next_execution, next_id,
+                challenge['expires_at'] if challenge else None,
+                '登录未通过，请核对账号、密码和验证码后重试'
+            )
+
     if response.status == 302:
         pass
     elif response.status == 200:
         if 'continueForm' not in html:
             raise SsoLoginError('SSO 登录页未知错误')
-        
+
         risk_execution = execution_of(html)
         if not risk_execution:
             raise SsoLoginError('账号存在安全风险，登录失败')
-        risk_form = urlencode({
-            'execution': risk_execution,
-            '_eventId': 'ignoreAndContinue'
-        })
 
         try:
             response, _ = await client.request(
                 submit_url,
                 method='POST',
-                body=risk_form,
+                body=urlencode({
+                    'execution': risk_execution,
+                    '_eventId': 'ignoreAndContinue'
+                }),
                 headers=headers,
                 redirects=0
             )
         except Exception as error:
             raise SsoLoginError('账号存在安全风险，登录失败') from error
-        
+
         if response.status != 302:
             raise SsoLoginError('账号存在安全风险，登录失败')
     elif response.status == 401:
-        raise SsoLoginError('账号或密码错误')
+        raise SsoLoginError('登录认证失败，请核对账号、密码和验证码')
     else:
         raise SsoLoginError(f'SSO 登录异常，状态码 {response.status}')
 
-    # Follow the CAS redirect with the same isolated VPN cookies.
     redirect_url = response.headers.get('Location')
     if not redirect_url:
         raise SsoLoginError('SSO 登录响应缺少跳转地址')
+
     await client.request(urljoin(submit_url, redirect_url), redirects=8)
     if is_admin:
         return
@@ -411,8 +481,20 @@ async def schedule(body, env):
     if not is_admin and not allowed_user(env, username):
         return api_result('3', '外部成员，禁止访问', 403)
 
+    challenge = None
+    if body.get('captcha_token'):
+        challenge = await read_ticket(env, str(body['captcha_token']), max_length=32768)
+        if (not challenge or challenge.get('purpose') != 'captcha'
+                or challenge.get('username') != username.upper()
+                or not safe_vpn_url(env, challenge.get('submit_url', ''))):
+            return api_result('6', '验证码已过期，请重新查询', 401)
+
+    captcha = str(body.get('captcha', '')).strip()
+    if len(captcha) > 32:
+        return api_result('1', '验证码格式错误', 400)
+
     token_data = await read_ticket(env, str(body.get('ticket', ''))) if body.get('ticket') else None
-    if body.get('ticket') and (not token_data or token_data.get('username') != username.upper()):
+    if body.get('ticket') and (not token_data or token_data.get('purpose') == 'captcha' or token_data.get('username') != username.upper()):
         return api_result('6', '会话已过期，请重新查询', 401)
     if token_data:
         session_id, user_id = token_data['session_id'], token_data['user_id']
@@ -440,7 +522,20 @@ async def schedule(body, env):
             if not admin_user or not admin_pass:
                 return api_result('1', '特殊模式未配置', 503)
             
-            await sso_login(client, admin_user, admin_pass, is_admin=True)
+            try:
+                await sso_login(
+                    client, admin_user, admin_pass,
+                    is_admin=True,
+                    owner=username,
+                    challenge=challenge,
+                    captcha=captcha,
+                    refresh=body.get('captcha_refresh') is True
+                )
+            except CaptchaRequired as error:
+                return error.response
+            except Exception as error:
+                console.warn(f'SSO 登录失败: {type(error).__name__}: {error}')
+                return api_result('1', str(error) if isinstance(error, ValueError) else 'SSO 登录失败', 502)
             session_id, user_id = special.get('session_id'), str(special.get('user_id'))
             student_id = str(special.get('student_id') or admin_user)
             real_name = str(special.get('real_name') or '')
@@ -451,12 +546,19 @@ async def schedule(body, env):
         else:
             try:
                 client = VpnClient(env)
-                session_id = await sso_login(client, username, password)
+                session_id = await sso_login(
+                    client, username, password,
+                    challenge=challenge,
+                    captcha=captcha,
+                    refresh=body.get('captcha_refresh') is True
+                )
                 user_id, real_name = await get_identity(client, session_id)
                 student_id = username
                 set_access_identity(student_id, real_name)
+            except CaptchaRequired as error:
+                return error.response
             except Exception as error:
-                console.warn(f'SSO 登录失败: {type(error).__name__}')
+                console.warn(f'SSO 登录失败: {type(error).__name__}: {error}')
                 return api_result('1', str(error) if isinstance(error, ValueError) else 'SSO 登录失败', 502)
 
     try:
@@ -508,7 +610,7 @@ async def sign_in(body, env):
         return api_result('1', '请求数据格式错误', 400)
 
     ticket = await read_ticket(env, str(body.get('ticket', '')))
-    if not ticket:
+    if not ticket or ticket.get('purpose') == 'captcha':
         return api_result('6', '会话已过期，请重新查询', 401)
     ticket_user = ticket.get('username', '')
     special = secret_json(env, 'ADMIN_ACCOUNT', {})
@@ -735,7 +837,7 @@ FlaskEntrypoint = wsgi.entrypoint(app)
 
 class Default(FlaskEntrypoint):
     async def scheduled(self, controller, env, ctx):
-        await clean_access_logs(env)
+        await clean_access_logs(self.env)
 
     async def fetch(self, request):
         started = time.monotonic()
