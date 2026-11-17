@@ -1,6 +1,6 @@
 [project]
 name = "buaa-signin"
-version = "2.0.1"
+version = "2.0.2"
 requires-python = ">=3.12"
 dependencies = ["flask>=3.1,<4"]
 

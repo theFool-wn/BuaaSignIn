@@ -23,6 +23,7 @@
 #                                                        remove useless code
 #                        Revised by WangNan, 2026/11/2, add captcha field,
 #                                                       fix SQL bug
+#                        Revised by WangNan, 2026/11/17, fix SQL bug
 # =============================================================================================================
 
 
@@ -739,7 +740,7 @@ async def clean_access_logs(env):
 
     for attempt in range(3):
         try:
-            results = await env.DB.batch(_to_js([
+            results = await env.DB.batch([
                 env.DB.prepare(
                     'DELETE FROM access_logs WHERE NOT EXISTS ('
                     'SELECT 1 FROM cleanup_budget WHERE day = ?) AND id IN ('
@@ -749,7 +750,7 @@ async def clean_access_logs(env):
                     'INSERT INTO cleanup_budget (day, reserved) VALUES (?, 40000) '
                     'ON CONFLICT(day) DO NOTHING'
                 ).bind(day)
-            ]))
+            ])
             break
         except Exception as error:
             console.error(f'D1 日志清理失败 ({attempt + 1}/3): {type(error).__name__}: {error}')
