@@ -653,8 +653,13 @@ async def sign_in(body, env):
         if response.status != 200:
             raise ValueError(f'签到上游 HTTP {response.status}')
         
-        result = json.loads(text)
-        return Response.json(result, headers={'Cache-Control': 'no-store'})
+        data = json.loads(text)
+        if int(data.get('STATUS')) != 0:
+            return api_result('1', data.get('ERRMSG') if data.get('ERRMSG') else '签到失败', 502)
+        result = data.get('result')
+        if int(result.get('stuSignStatus')) == 1:
+            return api_result('0', '签到成功')
+        return api_result('1', 'iclass 签到未确认，请重新查询课程', 502)
     except Exception as error:
         console.warn(f'签到失败: {type(error).__name__}')
         return api_result('1', str(error) if isinstance(error, ValueError) else '签到失败', 502)
