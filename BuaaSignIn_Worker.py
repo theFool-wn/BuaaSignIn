@@ -24,6 +24,7 @@
 #                        Revised by WangNan, 2026/11/2, add captcha field,
 #                                                       fix SQL bug
 #                        Revised by WangNan, 2026/11/17, fix SQL bug
+#                        Revised by WangNan, 2026/11/23, fix signin
 # =============================================================================================================
 
 
@@ -630,24 +631,24 @@ async def sign_in(body, env):
     client = VpnClient(env)
     client.cookies = ticket.get('cookies', {})
     try:
-        timestamp_data = await client.get_json(vpn_url(env, 'VPN_TIMESTAMP_PATH'))
-        if timestamp_data.get('STATUS') != '0':
-            raise ValueError('获取服务器时间失败')
-        
-        timestamp = timestamp_data.get('timestamp')
-        if not timestamp or timestamp == 'null':
-            timestamp = int(time.time() * 1000)
-        
-        query = urlencode({
+        submit_url = vpn_url(env, 'VPN_SIGN_PATH')
+
+        form = urlencode({
             'courseSchedId': course_id,
-            'timestamp': timestamp,
-            'id': ticket['user_id']
+            'id': ticket['user_id'],
+            'routerInfo': '02:00:00:00:00:00',
+            'longitude': '0',
+            'latitude': '0',
+            'machineInfo': 'Android'
         })
         response, text = await client.request(
-            vpn_url(env, 'VPN_SIGN_PATH') + '?' + query,
+            submit_url,
             method='POST',
-            headers={'sessionId': ticket['session_id']
-        })
+            body=form,
+            headers={
+                'sessionId': ticket['session_id'],
+                'Content-Type': 'application/x-www-form-urlencoded'}
+        )
 
         if response.status != 200:
             raise ValueError(f'签到上游 HTTP {response.status}')
