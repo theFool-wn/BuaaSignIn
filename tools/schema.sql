@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS access_logs (
     referer TEXT,
     duration_ms INTEGER NOT NULL,
     student_id TEXT,
-    real_name TEXT
+    real_name TEXT,
+    session_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS access_logs_at_idx ON access_logs (at);

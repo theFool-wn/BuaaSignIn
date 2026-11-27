@@ -25,6 +25,7 @@
 #                                                       fix SQL bug
 #                        Revised by WangNan, 2026/11/17, fix SQL bug
 #                        Revised by WangNan, 2026/11/23, fix signin
+#                        Revised by WangNan, 2026/11/27, add session_id to sql
 # =============================================================================================================
 
 
@@ -81,11 +82,12 @@ def client_ip(request):
     return request.headers.get('CF-Connecting-IP', '')[:64]
 
 
-def set_access_identity(student_id='', real_name=''):
+def set_access_identity(student_id='', real_name='', session_id=''):
     identity = ACCESS_IDENTITY.get()
     if identity is not None:
         identity['student_id'] = str(student_id or '')[:64]
         identity['real_name'] = str(real_name or '')[:100]
+        identity['session_id'] = str(session_id or '')
 
 
 def js_bytes(raw):
@@ -502,7 +504,7 @@ async def schedule(body, env):
         session_id, user_id = token_data['session_id'], token_data['user_id']
         student_id = token_data.get('student_id', username)
         real_name = token_data.get('real_name', '')
-        set_access_identity(student_id, real_name)
+        set_access_identity(student_id, real_name, session_id)
         client = VpnClient(env)
         client.cookies = token_data.get('cookies', {})
     else:
@@ -541,7 +543,7 @@ async def schedule(body, env):
             session_id, user_id = special.get('session_id'), str(special.get('user_id'))
             student_id = str(special.get('student_id') or admin_user)
             real_name = str(special.get('real_name') or '')
-            set_access_identity(student_id, real_name)
+            set_access_identity(student_id, real_name, session_id)
 
             if not session_id or not user_id:
                 return api_result('1', '特殊模式未配置', 503)
@@ -554,9 +556,10 @@ async def schedule(body, env):
                     captcha=captcha,
                     refresh=body.get('captcha_refresh') is True
                 )
+                set_access_identity(username, session_id=session_id)
                 user_id, real_name = await get_identity(client, session_id)
                 student_id = username
-                set_access_identity(student_id, real_name)
+                set_access_identity(student_id, real_name, session_id)
             except CaptchaRequired as error:
                 return error.response
             except Exception as error:
@@ -619,7 +622,11 @@ async def sign_in(body, env):
     is_admin = ticket_user.upper() in {str(x).upper() for x in special.get('aliases', [])}
     if not is_admin and not allowed_user(env, ticket_user):
         return api_result('3', '外部成员，禁止访问', 403)
-    set_access_identity(ticket.get('student_id', ticket_user), ticket.get('real_name', ''))
+    set_access_identity(
+        ticket.get('student_id', ticket_user),
+        ticket.get('real_name', ''),
+        ticket.get('session_id', '')
+    )
     
     course_id = str(body.get('id', ''))
     course_time = ticket.get('courses', {}).get(course_id)
@@ -719,8 +726,8 @@ async def log_access(env, request, path, status, elapsed_ms, identity):
         if size_after is None or size_after >= stop_bytes:
             return
         await env.DB.prepare(
-            'INSERT INTO access_logs (at, ip, method, path, status, user_agent, referer, duration_ms, student_id, real_name) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO access_logs (at, ip, method, path, status, user_agent, referer, duration_ms, student_id, real_name, session_id) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).bind(
             now.isoformat(),
             client_ip(request),
@@ -731,7 +738,8 @@ async def log_access(env, request, path, status, elapsed_ms, identity):
             request.headers.get('Referer', '')[:300],
             elapsed_ms,
             identity.get('student_id') or None,
-            identity.get('real_name') or None
+            identity.get('real_name') or None,
+            identity.get('session_id') or None
         ).run()
     except Exception as error:
         console.error(f'D1 访问日志写入失败: {type(error).__name__}')
